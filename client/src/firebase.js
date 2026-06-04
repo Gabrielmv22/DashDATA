@@ -4,12 +4,12 @@ import { getFirestore } from "firebase/firestore";
 
 // Configuración de Firebase de tu proyecto
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_AUTH_DOMAIN",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_STORAGE_BUCKET",
-  messagingSenderId: "TU_MESSAGING_SENDER_ID",
-  appId: "TU_APP_ID"
+  apiKey: "AIzaSyDFoV3FsIeV5Wotq2RJZVltnAfGso_8Ass",
+  authDomain: "dashdata-28654.firebaseapp.com",
+  projectId: "dashdata-28654",
+  storageBucket: "dashdata-28654.firebasestorage.app",
+  messagingSenderId: "4885368596",
+  appId: "1:4885368596:web:f6b0e51a7f0273530f3c01"
 };
 
 // Inicializar Firebase
