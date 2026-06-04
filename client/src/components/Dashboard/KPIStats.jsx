@@ -1,10 +1,34 @@
-// src/components/Dashboard/KPIStats.jsx
-const KPIStats = () => {
-  // Datos dummy por ahora
+// client/src/components/Dashboard/KPIStats.jsx
+const KPIStats = ({ datos }) => {
+  
+  // 1. Calcular el Total de Registros
+  const totalRegistros = datos.length;
+
+  // 2. Calcular el Promedio de Desgaste de Herramienta (Tool Wear)
+  const sumaDesgaste = datos.reduce((acumulador, item) => acumulador + (item.toolWear || 0), 0);
+  const promedioDesgaste = totalRegistros > 0 ? (sumaDesgaste / totalRegistros).toFixed(1) : 0;
+
+  // 3. Encontrar la Temperatura Máxima de Proceso Registrada
+  const temperaturas = datos.map(item => item.processTemp || 0);
+  const tempMaxima = datos.length > 0 ? Math.max(...temperaturas) : 0;
+
+  // Preparamos el arreglo para renderizar visualmente
   const stats = [
-    { label: 'TASA DE FALLAS CRÍTICAS', value: '12.5%', color: 'border-red-500' },
-    { label: 'DESGASTE PROMEDIO HERRAMIENTA', value: '145.2 min', color: 'border-orange-500' },
-    { label: 'TEMP. MÁXIMA PROCESO', value: '312 K', color: 'border-green-500' },
+    { 
+      label: 'TOTAL DE MEDICIONES', 
+      value: totalRegistros, 
+      color: 'border-blue-500' 
+    },
+    { 
+      label: 'DESGASTE PROMEDIO (MIN)', 
+      value: promedioDesgaste, 
+      color: 'border-orange-500' 
+    },
+    { 
+      label: 'TEMP. MÁXIMA PROCESO (K)', 
+      value: tempMaxima, 
+      color: 'border-red-500' 
+    },
   ];
 
   return (
