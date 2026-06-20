@@ -1,18 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  BarChart,
-  Bar,
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell,
+  BarChart, Bar, ScatterChart, Scatter, XAxis, YAxis, 
+  CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
 } from 'recharts';
-import { AlertCircle, Zap, Thermometer, LogOut, Menu } from 'lucide-react';
+import { AlertCircle, Zap, Thermometer, LogOut, Menu, Loader2 } from 'lucide-react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from './firebase'; 
 
 // Type definitions
 interface MachineRecord {
@@ -32,35 +25,6 @@ interface FilterState {
   failureType: string;
   dateRange: string;
 }
-
-// Generate realistic mock data
-const generateMockData = (): MachineRecord[] => {
-  const failureTypes = ['None', 'Power', 'Tool Wear', 'Overstrain', 'Heat Dissipation'] as const;
-  const machineTypes = ['L', 'M', 'H'] as const;
-  const data: MachineRecord[] = [];
-
-  for (let i = 1; i <= 100; i++) {
-    const type = machineTypes[Math.floor(Math.random() * 3)];
-    const failureRoll = Math.random();
-    const failureType = failureRoll < 0.4 ? 'None' : failureTypes[Math.floor(Math.random() * 4) + 1];
-
-    data.push({
-      id: i,
-      type,
-      airTemp: 295 + Math.random() * 20,
-      processTemp: 305 + Math.random() * 30,
-      rotSpeed: 1000 + Math.random() * 2500,
-      torque: 3 + Math.random() * 80,
-      toolWear: Math.random() * 250,
-      failureType: failureType as MachineRecord['failureType'],
-      target: failureRoll < 0.4 ? 0 : 1,
-    });
-  }
-
-  return data;
-};
-
-const MOCK_DATA = generateMockData();
 
 // Component: Filter Panel
 const FilterPanel: React.FC<{
@@ -333,21 +297,72 @@ const AlertsPanel: React.FC<{ data: MachineRecord[] }> = ({ data }) => {
 
 // Main App Component
 export default function App() {
+  const [data, setData] = useState<MachineRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [filters, setFilters] = useState<FilterState>({
     machineType: 'All',
     failureType: 'All',
     dateRange: 'all',
   });
 
+  // Mapeo estricto para coincidir con tu interfaz
+  const parseFailureType = (type: string): MachineRecord['failureType'] => {
+    if (!type || type === "No Failure") return "None";
+    if (type.includes("Power")) return "Power";
+    if (type.includes("Tool Wear")) return "Tool Wear";
+    if (type.includes("Overstrain")) return "Overstrain";
+    if (type.includes("Heat")) return "Heat Dissipation";
+    return "None";
+  };
+
+  useEffect(() => {
+    const fetchMachineData = async () => {
+      try {
+        setLoading(true);
+        // Ahora apunta a "mediciones", que es donde enviaste los datos
+        const querySnapshot = await getDocs(collection(db, "mediciones")); 
+        const fetchedData: MachineRecord[] = [];
+
+        querySnapshot.forEach((doc) => {
+          const docData = doc.data();
+          fetchedData.push({
+            id: Number(docData.UDI ?? doc.id),
+            type: docData.machineType as 'L' | 'M' | 'H',
+            airTemp: parseFloat(docData.airTemp),
+            processTemp: parseFloat(docData.processTemp),
+            rotSpeed: parseInt(docData.rotationalSpeed),
+            torque: parseFloat(docData.torque),
+            toolWear: parseInt(docData.toolWear),
+            failureType: parseFailureType(docData.failureType),
+            target: parseInt(docData.Target) as 0 | 1,
+          });
+        });
+
+        setData(fetchedData);
+      } catch (err) {
+        console.error("Error consultando Firestore:", err);
+        setError("Error al cargar los datos. Verifica la conexión y las reglas de seguridad de Firestore.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMachineData();
+  }, []);
+
   const filteredData = useMemo(() => {
-    return MOCK_DATA.filter((record) => {
+    return data.filter((record) => {
       if (filters.machineType !== 'All' && record.type !== filters.machineType) return false;
       if (filters.failureType !== 'All' && record.failureType !== filters.failureType) return false;
       return true;
     });
-  }, [filters]);
+  }, [filters, data]);
 
   const stats = useMemo(() => {
+    if (filteredData.length === 0) return { criticalFailureRate: "0.0", avgToolWear: "0.0", maxProcessTemp: "0.0" };
+    
     const failureCount = filteredData.filter((r) => r.target === 1).length;
     const criticalFailureRate = ((failureCount / filteredData.length) * 100).toFixed(1);
     const avgToolWear = (filteredData.reduce((sum, r) => sum + r.toolWear, 0) / filteredData.length).toFixed(1);
@@ -356,36 +371,38 @@ export default function App() {
     return { criticalFailureRate, avgToolWear, maxProcessTemp };
   }, [filteredData]);
 
+  // Manejo de UI durante la carga de red
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
+        <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+        <p className="text-slate-600 font-medium">Obteniendo telemetría de Firestore...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg max-w-md w-full">
+          <h3 className="font-bold flex items-center gap-2"><AlertCircle size={20}/> Error Crítico</h3>
+          <p className="mt-2 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Filter Panel */}
       <FilterPanel filters={filters} setFilters={setFilters} />
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <KPICard
-            title="Tasa de Fallos Críticos"
-            value={stats.criticalFailureRate}
-            unit="%"
-            type="critical"
-            icon={<AlertCircle size={24} />}
-          />
-          <KPICard
-            title="Desgaste Promedio de Herramientas"
-            value={stats.avgToolWear}
-            unit="min"
-            type="warning"
-            icon={<Zap size={24} />}
-          />
-          <KPICard
-            title="Temp Máxima de Proceso"
-            value={stats.maxProcessTemp}
-            unit="K"
-            type="normal"
-            icon={<Thermometer size={24} />}
-          />
+          <KPICard title="Tasa de Fallos Críticos" value={stats.criticalFailureRate} unit="%" type="critical" icon={<AlertCircle size={24} />} />
+          <KPICard title="Desgaste Promedio de Herramientas" value={stats.avgToolWear} unit="min" type="warning" icon={<Zap size={24} />} />
+          <KPICard title="Temp Máxima de Proceso" value={stats.maxProcessTemp} unit="K" type="normal" icon={<Thermometer size={24} />} />
         </div>
 
         {/* Charts Grid */}
@@ -403,11 +420,10 @@ export default function App() {
           <ToolWearChart data={filteredData} />
         </div>
 
-        {/* Bottom Row: Charts and Alerts */}
+        {/* Bottom Row */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3">
-            {/* Placeholder for additional analysis */}
-            <div className="bg-white rounded-lg p-6 shadow-md">
+            <div className="bg-white rounded-lg p-6 shadow-md border border-slate-100">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Estadísticas Generales</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center p-4 bg-slate-50 rounded">
@@ -424,17 +440,13 @@ export default function App() {
                 </div>
                 <div className="text-center p-4 bg-slate-50 rounded">
                   <p className="text-2xl font-bold text-amber-600">
-                    {(
-                      filteredData.reduce((sum, r) => sum + r.rotSpeed, 0) / filteredData.length
-                    ).toFixed(0)}
+                    {filteredData.length > 0 ? (filteredData.reduce((sum, r) => sum + r.rotSpeed, 0) / filteredData.length).toFixed(0) : 0}
                   </p>
                   <p className="text-xs text-slate-600 mt-1">Vel. Promedio (rpm)</p>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Alerts Panel */}
           <div>
             <AlertsPanel data={filteredData} />
           </div>
